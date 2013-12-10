@@ -1,36 +1,19 @@
 module BootstrapForms
   class FormBuilder < ::ActionView::Helpers::FormBuilder
     require_relative 'helpers/wrappers'
+    require_relative 'helpers/errors'
     include BootstrapForms::Helpers::Wrappers
+    include BootstrapForms::Helpers::Errors
 
-    delegate :content_tag, :hidden_field_tag, :check_box_tag, :radio_button_tag, :button_tag, :link_to, :to => :@template
+    delegate :capture, :content_tag, :hidden_field_tag, :check_box_tag, :radio_button_tag, :button_tag, :link_to, to: :@template
 
-    def error_messages
-      if object.try(:errors) and object.errors.full_messages.any?
-        content_tag(:div, :class => 'alert alert-block alert-error validation-errors') do
-          content_tag(:h4, I18n.t('bootstrap_forms.errors.header', :model => object.class.model_name.human), :class => 'alert-heading') +
-          content_tag(:ul) do
-            object.errors.full_messages.map do |message|
-              content_tag(:li, message)
-            end.join('').html_safe
-          end
-        end
-      else
-        '' # return empty string
-      end
-    end
-
-    %w(
-      select
-      collection_select
-      country_select
-      datetime_select
-      date_select
-      time_select
-      time_zone_select
-
+    TEXT_FIELDS = %w(
+      color_field
+      date_field
+      datetime_field
+      datetime_local_field
       email_field
-      file_field
+      month_field
       number_field
       password_field
       phone_field
@@ -39,202 +22,161 @@ module BootstrapForms
       telephone_field
       text_area
       text_field
+      time_field
       url_field
-    ).each do |method_name|
-      define_method(method_name) do |name, *raw_args|
+      week_field
+    )
 
-        # Special case for select
-        if method_name == 'select' or method_name == 'country_select'
-          while raw_args.length < 3
-            raw_args << {}
-          end
-        end
+    SELECT_FIELDS = %w(
+      collection_select
+      date_select
+      datetime_select
+      time_select
+      time_zone_select
+      select
+    )
+  
+    TEXT_FIELDS.each do |method_name|
+      define_method(method_name) do |name, *args|
+        options = args.extract_options!
+        options[:class] = "#{BOOTSTRAP_CLASSES[:form_control]} #{options[:class]}"
 
-        options = {}
-        html_options = {}
-
-        if raw_args.length > 0
-          if raw_args[-1].is_a?(Hash) && raw_args[-2].is_a?(Hash)
-            html_options = raw_args[-1]
-            options = raw_args[-2]
-          elsif raw_args[-1].is_a?(Hash)
-            options = raw_args[-1]
-          end
-        end
-
-        # Add options hash to argument array if its empty
-        raw_args << options if raw_args.length == 0
-
-        @name = name
-        @field_options = field_options(options)
-        @args = options
-
-        control_group_div do
-          label_field + input_div do
-            options.merge!(@field_options.merge(required_attribute))
-            input_append = (options[:append] || options[:prepend] || options[:append_button]) ? true : nil
-            extras(input_append) { super(name, *raw_args) }
-          end
-        end
-      end
-    end
-
-    def check_box(name, args = {}, checked_value = "1", unchecked_value = "0")
-      @name = name
-      @field_options = field_options(args)
-      @args = args
-
-      control_group_div do
-        input_div do
-          @field_options.merge!(required_attribute)
-          if @field_options[:label] == false || @field_options[:label] == ''
-            extras { super(name, @args.merge(@field_options)) }
-          else
-            klasses = 'checkbox'
-            klasses << ' inline' if @field_options.delete(:inline) == true
-            @args.delete :inline
-            label(@name, :class => klasses) do
-              extras { super(name, @args.merge(@field_options), checked_value, unchecked_value) + (@field_options[:label].blank? ? human_attribute_name : @field_options[:label])}
+        form_group(name, options) do
+          label_field(name, options) << input_group(options) do
+            extras(options) do
+              options[:placeholder] = label_content(name, options) if options[:label] == :placeholder
+              super name, *(args << options)
             end
           end
         end
       end
     end
 
-    def radio_buttons(name, values = {}, opts = {})
-      @name = name
-      @field_options = @options.slice(:namespace, :index).merge(opts.merge(required_attribute))
-      control_group_div do
-        label_field + input_div do
-          klasses = 'radio'
-          klasses << ' inline' if @field_options.delete(:inline) == true
+    SELECT_FIELDS.each do |method_name|
+      define_method(method_name) do |name, choices=nil, options={}, html_options={}|
+        html_options[:class] = "#{BOOTSTRAP_CLASSES[:form_control]} #{html_options[:class]}"
 
-          buttons = values.map do |text, value|
-            radio_options = @field_options
-            if value.is_a? Hash
-              radio_options = radio_options.merge(value)
-              value = radio_options.delete(:value)
-            end
-
-            label("#{@name}_#{value}", :class => klasses) do
-              radio_button(name, value, radio_options) + text
-            end
-          end.join('')
-          buttons << extras
-          buttons.html_safe
-        end
-      end
-    end
-
-    def collection_check_boxes(attribute, records, record_id, record_name, args = {})
-      @name = attribute
-      @field_options = field_options(args)
-      @args = args
-
-      control_group_div do
-        label_field + input_div do
-          options = @field_options.except(*BOOTSTRAP_OPTIONS).merge(required_attribute)
-          # Since we're using check_box_tag() we may have to lookup the instance ourselves
-          instance = object || @template.instance_variable_get("@#{object_name}")
-          boxes = records.collect do |record|
-            options[:id] = "#{object_name}_#{attribute}_#{record.send(record_id)}"
-            checkbox = check_box_tag("#{object_name}[#{attribute}][]", record.send(record_id), [instance.send(attribute)].flatten.include?(record.send(record_id)), options)
-
-            content_tag(:label, :class => ['checkbox', ('inline' if @field_options[:inline])].compact) do
-              checkbox + record.send(record_name)
-            end
-          end.join('')
-          boxes << extras
-          boxes.html_safe
-        end
-      end
-    end
-
-    def collection_radio_buttons(attribute, records, record_id, record_name, args = {})
-      @name = attribute
-      @field_options = field_options(args)
-      @args = args
-
-      control_group_div do
-        label_field + input_div do
-          options = @field_options.merge(required_attribute)
-          buttons = records.collect do |record|
-            radiobutton = radio_button(attribute, record.send(record_id), options)
-            content_tag(:label, :class => ['radio', ('inline' if @field_options[:inline])].compact) do
-              radiobutton + record.send(record_name)
-            end
-          end.join('')
-          buttons << extras
-          buttons.html_safe
-        end
-      end
-    end
-
-    def uneditable_input(name, args = {})
-      @name = name
-      @field_options = field_options(args)
-      @args = args
-
-      control_group_div do
-        label_field + input_div do
-          extras do
-            value = @field_options.delete(:value)
-            @field_options[:class] = [@field_options[:class], 'uneditable-input'].compact
-
-            content_tag(:span, @field_options) do
-              value || object.send(@name.to_sym) rescue nil
+        form_group(name, options) do
+          label_field(name, options) << select_group(options) do
+            extras(options) do
+              super name, choices, options, html_options
             end
           end
         end
       end
     end
 
-    def button(name = nil, args = {})
-      name, args = nil, name if name.is_a?(Hash)
-      @name = name
-      @field_options = field_options(args)
-      @args = args
+    def check_box(name, options={}, checked_value='1', unchecked_value='0')
+      return super if options[:bare]
 
-      @field_options[:class] ||= 'btn'
-      super(name, args.merge(@field_options))
-    end
-
-    def submit(name = nil, args = {})
-      name, args = nil, name if name.is_a?(Hash)
-      @name = name
-      @field_options = field_options(args)
-      @args = args
-
-      @field_options[:class] ||= 'btn btn-primary'
-      super(name, args.merge(@field_options))
-    end
-
-    def cancel(name = nil, args = {})
-      name, args = nil, name if name.is_a?(Hash)
-      name ||= I18n.t('bootstrap_forms.buttons.cancel')
-      @field_options = field_options(args)
-      @field_options[:class] ||= 'btn cancel'
-      @field_options[:back] ||= :back
-      link_to(name, @field_options[:back], :class => @field_options[:class])
-    end
-
-    def actions(&block)
-      content_tag(:div, :class => 'form-actions') do
-        if block_given?
-          yield
-        else
-          [submit, cancel].join(' ').html_safe
+      content_tag(:div, class: BOOTSTRAP_CLASSES[:checkbox]) do
+        label_field(name, options.merge(group: false)) do
+          super(name, options, checked_value, unchecked_value) <<
+          label_content(name, options)
         end
       end
     end
 
-    private
-    def field_options(args)
-      if @options
-        @options.slice(:namespace, :index).merge(args)
-      else
-        args
+    def check_boxes(name, items={}, options={})
+      return inline_check_boxes(name, items={}, options={}) if options[:inline]
+        
+      items.map do |text, values|
+        content_tag(:div, class: BOOTSTRAP_CLASSES[:checkbox]) do
+          label("#{name}_#{values[:checked]}") do
+            check_box(name, options.merge(bare: true), values[:checked], values[:unchecked]) + text
+          end
+        end
+      end.join
+    end
+
+    def inline_check_boxes(name, items={}, options={})
+      form_group(name, options) do
+        extras(options) do
+          items.map do |text, values|
+            label("#{name}_#{values[:checked]}", class: BOOTSTRAP_CLASSES[:checkbox_inline]) do
+              check_box(name, options.merge(bare: true), values[:checked], values[:unchecked]) + text
+            end
+          end.join
+        end
       end
+    end
+
+
+    def radio_button(name, value, options = {})
+      return super if options[:bare]
+
+      content_tag(:div, class: BOOTSTRAP_CLASSES[:radio]) do
+        label_field(name, options.merge(group: false)) do
+          super(name, value, options) <<
+          label_content(name, options)
+        end
+      end
+    end
+
+    def radio_buttons(name, items={}, options={})
+      return inline_radio_buttons(name, items, options) if options[:inline]
+        
+      items.map do |text, value|
+        content_tag(:div, class: BOOTSTRAP_CLASSES[:radio]) do
+          label("#{name}_#{value}") do
+            radio_button(name, value, options.merge(bare: true)) + text
+          end
+        end
+      end.join.html_safe
+    end
+
+    def inline_radio_buttons(name, items={}, options={})
+      form_group(name, options) do
+        extras(options) do
+          items.map do |text, value|
+            label("#{name}_#{value}", class: BOOTSTRAP_CLASSES[:radio_inline]) do
+              radio_button(name, value, options.merge(bare: true)) + text
+            end
+          end.join
+        end
+      end
+    end
+
+    # def collection_check_boxes(attribute, records, record_id, record_name, args = {})
+    #   @name = attribute
+    #   @field_options = field_options(args)
+    #   @args = args
+
+    #   control_group_div do
+    #     label_field + input_div do
+    #       options = @field_options.except(*BOOTSTRAP_OPTIONS).merge(required_attribute)
+    #       # Since we're using check_box_tag() we may have to lookup the instance ourselves
+    #       instance = object || @template.instance_variable_get("@#{object_name}")
+    #       boxes = records.collect do |record|
+    #         options[:id] = "#{object_name}_#{attribute}_#{record.send(record_id)}"
+    #         checkbox = check_box_tag("#{object_name}[#{attribute}][]", record.send(record_id), [instance.send(attribute)].flatten.include?(record.send(record_id)), options)
+
+    #         content_tag(:label, :class => ['checkbox', ('inline' if @field_options[:inline])].compact) do
+    #           checkbox + record.send(record_name)
+    #         end
+    #       end.join('')
+    #       boxes << extras
+    #       boxes.html_safe
+    #     end
+    #   end
+    # end
+
+    def collection_radio_buttons(name, collection, value_method, text_method, options={}, html_options={})
+      values = {}
+      collection.each { |item| values[item.send(text_method)] = item.send(value_method) }
+      radio_buttons(name, values, options)
+    end
+
+    def button(*args)
+      options = args.extract_options!
+      options[:class] ||= 'btn btn-primary'
+      super(args.first, options)
+    end
+
+    def submit(*args)
+      options = args.extract_options!
+      options[:class] ||= 'btn btn-primary'
+      super(args.first, options)
     end
   end
 end
