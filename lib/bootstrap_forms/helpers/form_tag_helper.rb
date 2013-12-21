@@ -13,7 +13,7 @@ module BootstrapForms
             label_field(name, options) << input_group(options) do
               extras(options) do
                 options[:placeholder] = label_content(name, options) if options[:label] == :placeholder
-                send method_name.to_sym, name, *(args << options)
+                send "#{method_name}_tag".to_sym, name, *(args << options)
               end
             end
           end
