@@ -87,6 +87,8 @@ module BootstrapForms
 
 
       def label_content(name, options={})
+        return options[:label] if options[:label] and options[:label] != :placeholder
+        
         object ||= nil
         object_name = @object_name.to_s.gsub(/\[(.*)_attributes\]\[\d\]/, '.\1')
         method_and_value = options[:value].present? ? "#{name}.#{options[:value]}" : name
