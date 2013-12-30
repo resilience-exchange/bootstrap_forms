@@ -28,7 +28,6 @@ module BootstrapForms
     )
 
     SELECT_FIELDS = %w(
-      collection_select
       date_select
       datetime_select
       time_select
@@ -61,6 +60,18 @@ module BootstrapForms
             extras(options) do
               super name, choices, options, html_options
             end
+          end
+        end
+      end
+    end
+
+    def collection_select(name, collection, value_method, text_method, options={}, html_options={})
+      html_options[:class] = "#{BOOTSTRAP_CLASSES[:form_control]} #{html_options[:class]}"
+
+      form_group(name, options) do
+        label_field(name, options) << select_group(options) do
+          extras(options) do
+            super
           end
         end
       end
