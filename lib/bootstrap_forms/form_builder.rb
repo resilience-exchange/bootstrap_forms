@@ -117,7 +117,7 @@ module BootstrapForms
       return super if options[:bare]
 
       content_tag(:div, class: BOOTSTRAP_CLASSES[:radio]) do
-        label_field(name, options.merge(group: false)) do
+        label_field(name, options.merge(group: false, for: nil)) do
           super(name, value, options) <<
           label_content(name, options)
         end
@@ -130,7 +130,7 @@ module BootstrapForms
       items.map do |text, value|
         content_tag(:div, class: BOOTSTRAP_CLASSES[:radio]) do
           label("#{name}_#{value}") do
-            radio_button(name, value, options.merge(bare: true)) + text
+            radio_button(name, value, options.merge(bare: true, for: nil)) + text
           end
         end
       end.join.html_safe

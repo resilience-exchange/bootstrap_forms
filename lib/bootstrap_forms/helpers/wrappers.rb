@@ -77,6 +77,7 @@ module BootstrapForms
         label_options = {}
         label_options[:class] = BOOTSTRAP_CLASSES[:label] unless options[:group] == false
         label_options[:class] = "#{label_options[:class]} #{BOOTSTRAP_CLASSES[:screen_reader]}" if options[:label] == :hide or placeholder
+        label_options[:for]   = options[:for] if options.has_key?(:for)
 
         content = block_given? ? block.call : (options[:label] unless placeholder)
         method  = respond_to?(:object) ? 'label' : 'label_tag'
